@@ -61,43 +61,102 @@ EOL
 cat <<'EOL' > iptables_control.sh
 #!/bin/bash
 
-# Define constants
-SSH_PORT=22
-LOCAL_SUBNET="10.13.37.0/24"
+# Variables for interfaces and networks
+TAILSCALE_INTERFACE="tailscale0"
+TAILSCALE_PORTS="41641"  # Tailscale's primary communication port (UDP)
+INTERNAL_SUBNET="10.13.37.0/24"  # Replace with your internal network range
+BROADCAST_ADDRESS="192.168.1.255"  # Local broadcast address
+MULTICAST_ADDRESS="239.192.0.0"    # Multicast IP address for UDP traffic
+MULTICAST_PORT="3838"              # Multicast port to allow
 
+# IP ranges for Tailscale coordination servers (add specific IPs if needed)
+TAILSCALE_IP_RANGES="100.64.0.0/10"
+
+# Function to block internet traffic but allow Tailscale, SSH, internal network, multicast, and broadcast
 block_internet() {
-    echo "Blocking all internet traffic except SSH and internal subnet ($LOCAL_SUBNET)..."
+    echo "Blocking internet traffic but allowing Tailscale, SSH, internal network ($INTERNAL_SUBNET), multicast, and broadcast..."
+
+    # Reset all iptables rules to avoid conflicts
     iptables -F
+    iptables -t nat -F
+    iptables -t mangle -F
     iptables -X
+
+    # Default drop policy for INPUT, OUTPUT, and FORWARD chains
+    iptables -P INPUT DROP
+    iptables -P FORWARD DROP
+    iptables -P OUTPUT DROP
+
+    # Allow loopback traffic
     iptables -A INPUT -i lo -j ACCEPT
     iptables -A OUTPUT -o lo -j ACCEPT
-    iptables -A INPUT -p tcp --dport $SSH_PORT -j ACCEPT
-    iptables -A OUTPUT -p tcp --sport $SSH_PORT -j ACCEPT
-    iptables -A INPUT -s $LOCAL_SUBNET -j ACCEPT
-    iptables -A OUTPUT -d $LOCAL_SUBNET -j ACCEPT
-    iptables -P INPUT DROP
-    iptables -P OUTPUT DROP
-    iptables -P FORWARD DROP
-    echo "All internet traffic blocked, but SSH and internal subnet traffic are allowed."
+
+    # Allow SSH (port 22) traffic
+    iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+    iptables -A OUTPUT -p tcp --sport 22 -j ACCEPT
+
+    # Allow all traffic on the Tailscale interface
+    iptables -A INPUT -i "$TAILSCALE_INTERFACE" -j ACCEPT
+    iptables -A OUTPUT -o "$TAILSCALE_INTERFACE" -j ACCEPT
+
+    # Allow Tailscale coordination server IP ranges
+    for ip_range in $TAILSCALE_IP_RANGES; do
+        iptables -A OUTPUT -d "$ip_range" -j ACCEPT
+        iptables -A INPUT -s "$ip_range" -j ACCEPT
+    done
+
+    # Allow Tailscale communication ports (UDP 41641 by default)
+    iptables -A INPUT -p udp -m udp --sport "$TAILSCALE_PORTS" -j ACCEPT
+    iptables -A OUTPUT -p udp -m udp --dport "$TAILSCALE_PORTS" -j ACCEPT
+
+    # Allow DNS queries (UDP port 53)
+    iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
+    iptables -A INPUT -p udp --sport 53 -j ACCEPT
+
+    # Allow HTTPS traffic for Tailscale communication (if needed)
+    iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
+    iptables -A INPUT -p tcp --sport 443 -j ACCEPT
+
+    # Allow all traffic within the internal subnet
+    iptables -A INPUT -s "$INTERNAL_SUBNET" -j ACCEPT
+    iptables -A OUTPUT -d "$INTERNAL_SUBNET" -j ACCEPT
+
+    # Allow Multicast UDP traffic to the specified address and port
+    iptables -A INPUT -d "$MULTICAST_ADDRESS" -p udp --dport "$MULTICAST_PORT" -j ACCEPT
+    iptables -A OUTPUT -d "$MULTICAST_ADDRESS" -p udp --sport "$MULTICAST_PORT" -j ACCEPT
+
+    # Allow Broadcast traffic to the specified address
+    iptables -A INPUT -d "$BROADCAST_ADDRESS" -j ACCEPT
+    iptables -A OUTPUT -d "$BROADCAST_ADDRESS" -j ACCEPT
+
+    echo "Internet traffic blocked. Tailscale, SSH, internal network, multicast, and broadcast traffic are allowed."
 }
 
+# Function to enable all internet traffic while keeping SSH, internal network, multicast, and broadcast access
 enable_internet() {
     echo "Enabling all internet traffic..."
+
+    # Flush all rules
     iptables -F
+    iptables -t nat -F
+    iptables -t mangle -F
     iptables -X
+
+    # Set default policies to ACCEPT
     iptables -P INPUT ACCEPT
-    iptables -P OUTPUT ACCEPT
     iptables -P FORWARD ACCEPT
-    echo "All internet traffic is now enabled."
+    iptables -P OUTPUT ACCEPT
+
+    echo "All internet traffic enabled. SSH, internal network, multicast, and broadcast access retained."
 }
 
+# Check for command-line argument and run the corresponding function
 if [ "$1" == "block" ]; then
     block_internet
 elif [ "$1" == "enable" ]; then
     enable_internet
 else
     echo "Usage: $0 {block|enable}"
-    exit 1
 fi
 EOL
 
