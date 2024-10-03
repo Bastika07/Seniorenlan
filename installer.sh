@@ -62,19 +62,16 @@ cat <<'EOL' > iptables_control.sh
 #!/bin/bash
 
 # Variables for interfaces and networks
-TAILSCALE_INTERFACE="tailscale0"
-TAILSCALE_PORTS="41641"  # Tailscale's primary communication port (UDP)
-INTERNAL_SUBNET="10.13.37.0/24"  # Replace with your internal network range
-BROADCAST_ADDRESS="192.168.1.255"  # Local broadcast address
-MULTICAST_ADDRESS="239.192.0.0"    # Multicast IP address for UDP traffic
-MULTICAST_PORT="3838"              # Multicast port to allow
+ZEROTIER_INTERFACE="ztcfwzikth"           # Your specific ZeroTier interface
+ZEROTIER_PORT="9993"                       # ZeroTier's default UDP port for management
+INTERNAL_SUBNET="10.13.37.0/24"            # Replace with your internal network range
+BROADCAST_ADDRESS="192.168.1.255"          # Local broadcast address
+MULTICAST_ADDRESS="239.192.0.0"            # Multicast IP address for UDP traffic
+MULTICAST_PORT="3838"                      # Multicast port to allow
 
-# IP ranges for Tailscale coordination servers (add specific IPs if needed)
-TAILSCALE_IP_RANGES="100.64.0.0/10"
-
-# Function to block internet traffic but allow Tailscale, SSH, internal network, multicast, and broadcast
+# Function to block internet traffic but allow ZeroTier, SSH, internal network, multicast, and broadcast
 block_internet() {
-    echo "Blocking internet traffic but allowing Tailscale, SSH, internal network ($INTERNAL_SUBNET), multicast, and broadcast..."
+    echo "Blocking internet traffic but allowing ZeroTier, SSH, internal network ($INTERNAL_SUBNET), multicast, and broadcast..."
 
     # Reset all iptables rules to avoid conflicts
     iptables -F
@@ -95,25 +92,19 @@ block_internet() {
     iptables -A INPUT -p tcp --dport 22 -j ACCEPT
     iptables -A OUTPUT -p tcp --sport 22 -j ACCEPT
 
-    # Allow all traffic on the Tailscale interface
-    iptables -A INPUT -i "$TAILSCALE_INTERFACE" -j ACCEPT
-    iptables -A OUTPUT -o "$TAILSCALE_INTERFACE" -j ACCEPT
+    # Allow all traffic on the ZeroTier interface
+    iptables -A INPUT -i "$ZEROTIER_INTERFACE" -j ACCEPT
+    iptables -A OUTPUT -o "$ZEROTIER_INTERFACE" -j ACCEPT
 
-    # Allow Tailscale coordination server IP ranges
-    for ip_range in $TAILSCALE_IP_RANGES; do
-        iptables -A OUTPUT -d "$ip_range" -j ACCEPT
-        iptables -A INPUT -s "$ip_range" -j ACCEPT
-    done
-
-    # Allow Tailscale communication ports (UDP 41641 by default)
-    iptables -A INPUT -p udp -m udp --sport "$TAILSCALE_PORTS" -j ACCEPT
-    iptables -A OUTPUT -p udp -m udp --dport "$TAILSCALE_PORTS" -j ACCEPT
+    # Allow ZeroTier communication ports (UDP 9993 by default)
+    iptables -A INPUT -p udp -m udp --sport "$ZEROTIER_PORT" -j ACCEPT
+    iptables -A OUTPUT -p udp -m udp --dport "$ZEROTIER_PORT" -j ACCEPT
 
     # Allow DNS queries (UDP port 53)
     iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
     iptables -A INPUT -p udp --sport 53 -j ACCEPT
 
-    # Allow HTTPS traffic for Tailscale communication (if needed)
+    # Allow HTTPS traffic for ZeroTier communication (if needed)
     iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
     iptables -A INPUT -p tcp --sport 443 -j ACCEPT
 
@@ -129,7 +120,7 @@ block_internet() {
     iptables -A INPUT -d "$BROADCAST_ADDRESS" -j ACCEPT
     iptables -A OUTPUT -d "$BROADCAST_ADDRESS" -j ACCEPT
 
-    echo "Internet traffic blocked. Tailscale, SSH, internal network, multicast, and broadcast traffic are allowed."
+    echo "Internet traffic blocked. ZeroTier, SSH, internal network, multicast, and broadcast traffic are allowed."
 }
 
 # Function to enable all internet traffic while keeping SSH, internal network, multicast, and broadcast access
