@@ -30,7 +30,7 @@ services:
   linuxgsm:
     build:
       context: /root/docker-gameserver
-      dockerfile: dockerfiles/Dockerfile.mh
+      dockerfile: dockerfiles/Dockerfile.cs2
     container_name: cs2server
     restart: unless-stopped
     network_mode: host
