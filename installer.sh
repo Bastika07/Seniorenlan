@@ -43,7 +43,7 @@ chmod -R 777 docker-gameserver/mordhau
 chmod -R 777 docker-gameserver/cs2
 
 # Create or update the Docker Compose file for docker-eti-sync-server
-cat <<EOL > docker-eti-sync-server/docker-compose.yml
+cat <<EOL > docker-eti-sync-server/docker-compose.yaml
 version: "3"
 
 services:
